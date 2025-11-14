@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -85,22 +87,56 @@ func ParserData(name string, panoUrl string) {
 	for _, location := range locations {
 		fileName := "/l1_" + location + "_1_1.jpg"
 		downloadUrl := "https://vrimg.justeasy.cn/" + strings.ReplaceAll(panoUrl, "thumb.jpg", location+fileName)
-		response, err := http.Get(downloadUrl)
-		if err != nil {
-			panic(err)
-		}
-		defer response.Body.Close()
-		data, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			panic(err)
-		}
-		if err != nil {
+		if err := downloadFile(name, downloadUrl, fileName); err != nil {
 			fmt.Println(name+":"+fileName+"下载失败：", err)
 		}
-		ioutil.WriteFile("./output/"+name+date+fileName, data, 0644)
+		valid, err := isValidJPEG("./output/" + name + date + fileName)
+		if !valid {
+			fmt.Println(name+":"+fileName+"，文件验证失败，将尝试备用地址下载，", err)
+			downloadUrl = "https://vrpic.justeasy.cn/" + strings.ReplaceAll(panoUrl, "thumb.jpg", location+fileName)
+			if err = downloadFile(name, downloadUrl, fileName); err != nil {
+				fmt.Println(name+":"+fileName+"下载失败：", err)
+			}
+			fmt.Println(name + ":" + fileName + "下载成功，备用地址下载成功。")
+		}
 		//println(downloadUrl)
 	}
 	CubeToSphere(".\\output\\" + name + date + "\\")
+}
+
+func isValidJPEG(filename string) (bool, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return false, fmt.Errorf("无法打开文件: %v", err)
+	}
+	defer file.Close()
+
+	_, format, err := image.Decode(file)
+	if err != nil {
+		return false, fmt.Errorf("JPEG文件损坏或格式不正确: %v", err)
+	}
+	if format != "jpeg" {
+		return false, fmt.Errorf("文件不是JPEG格式，检测到的格式: %s", format)
+	}
+
+	return true, nil
+}
+
+func downloadFile(name, url, fileName string) error {
+	date := time.Now().Format("20060102")
+	response, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	data, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return err
+	}
+	if err = ioutil.WriteFile("./output/"+name+date+fileName, data, 0644); err != nil {
+		return err
+	}
+	return nil
 }
 
 //将方形图转为全景图
@@ -190,7 +226,7 @@ func main() {
 
 	}
 	println("请到如下地址进行全景图预览：")
-	println("http://egdw.gitee.io/panorama_display/")
+	println("https://egdw.github.io/panorama_display/")
 	var pause string
 	fmt.Scanln(&pause)
 }
